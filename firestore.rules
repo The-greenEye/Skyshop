@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && (
+        (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role in ['admin','super_admin'] &&
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive != false
+        ) ||
+        (
+          exists(/databases/$(database)/documents/admin/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/admin/$(request.auth.uid)).data.role in ['admin','super_admin'] &&
+          get(/databases/$(database)/documents/admin/$(request.auth.uid)).data.isActive != false
+        )
+      );
+    }
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /admin/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /users/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if false;
+    }
+    match /users/{uid}/notifications/{id} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create: if isAdmin();
+      allow update: if signedIn() && request.auth.uid == uid;
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+    match /products/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /categories/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /paymentMethods/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /checkoutFields/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /siteSettings/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /coupons/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /reviews/{id} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+    match /orders/{id} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+    match /notifications/{id} { allow read, write: if isAdmin(); }
+    match /auditLogs/{id} { allow read, create: if isAdmin(); allow update, delete: if false; }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
